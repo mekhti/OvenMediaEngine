@@ -12,6 +12,9 @@
 
 #include "../transcode_private.h"
 
+#define MAX_BITRATE_FACTOR 3
+#define GOP_SIZE_FACTOR 5
+
 OvenCodecImplAvcodecEncAVC::~OvenCodecImplAvcodecEncAVC()
 {
 	Stop();
@@ -50,8 +53,10 @@ bool OvenCodecImplAvcodecEncAVC::Configure(std::shared_ptr<TranscodeContext> con
 
 	_context->bit_rate = _output_context->GetBitrate();
 	_context->rc_min_rate = _context->bit_rate;
-	_context->rc_max_rate = _context->bit_rate;
-	_context->rc_buffer_size = static_cast<int>(_context->bit_rate / 2);
+	// _context->rc_max_rate = _context->bit_rate;
+	_context->rc_max_rate = _context->bit_rate * MAX_BITRATE_FACTOR;
+	// _context->rc_buffer_size = static_cast<int>(_context->bit_rate / 2);
+	_context->rc_buffer_size = static_cast<int>(_context->rc_max_rate / 2);
 	_context->sample_aspect_ratio = (AVRational){1, 1};
 
 	// From avcodec.h:
@@ -66,7 +71,10 @@ bool OvenCodecImplAvcodecEncAVC::Configure(std::shared_ptr<TranscodeContext> con
 
 	AVRational codec_timebase = ::av_inv_q(::av_mul_q(::av_d2q(_output_context->GetFrameRate(), AV_TIME_BASE), (AVRational){_context->ticks_per_frame, 1}));
 	_context->time_base = codec_timebase;
-	_context->gop_size = _context->framerate.num / _context->framerate.den;
+
+	// TODO: Make this value settable from Server.xml configuration
+    //_context->gop_size = _context->framerate.num / _context->framerate.den;
+	_context->gop_size = (_context->framerate.num / _context->framerate.den) * GOP_SIZE_FACTOR;
 	_context->max_b_frames = 0;
 	_context->pix_fmt = AV_PIX_FMT_YUV420P;
 	_context->width = _output_context->GetVideoWidth();
@@ -82,10 +90,13 @@ bool OvenCodecImplAvcodecEncAVC::Configure(std::shared_ptr<TranscodeContext> con
 	::av_opt_set(_context->priv_data, "preset", "ultrafast", 0);
 
 	// 인코딩 딜레이
-	::av_opt_set(_context->priv_data, "tune", "zerolatency", 0);
+    // Next line commented for increasing output picture quality
+    // TODO: Make this parameter settable from Server.xml
+    // ::av_opt_set(_context->priv_data, "tune", "zerolatency", 0);
 
 	// 인코딩 딜레이에서 sliced-thread 옵션 제거. MAC 환경에서 브라우저 호환성
-	::av_opt_set(_context->priv_data, "x264opts", "bframes=0:sliced-threads=0:b-adapt=1:no-scenecut:keyint=30:min-keyint=30", 0);
+	// ::av_opt_set(_context->priv_data, "x264opts", "bframes=0:sliced-threads=0:b-adapt=1:no-scenecut:keyint=30:min-keyint=30", 0);
+	::av_opt_set(_context->priv_data, "x264opts", "bframes=0:sliced-threads=0:b-adapt=1:no-scenecut:keyint=125:min-keyint=30", 0);
 	// ::av_opt_set(_context->priv_data, "x264opts", "bframes=0:sliced-threads=0:b-adapt=1", 0);
 
 	// CBR 옵션 / bitrate는 kbps 단위 / *문제는 MAC 크롬에서 재생이 안된다. 그래서 maxrate 값만 지정해줌.

@@ -140,7 +140,10 @@ bool RtmpWriter::Start()
 		}
 	}
 
-	if (avformat_write_header(_format_context, nullptr) < 0)
+    AVDictionary *flv_format_flags = nullptr;
+	av_dict_set(&flv_format_flags, "flvflags", "no_duration_filesize", 0);
+
+	if (avformat_write_header(_format_context, &flv_format_flags) < 0)
 	{
 		logte("Could not create header");
 		return false;
